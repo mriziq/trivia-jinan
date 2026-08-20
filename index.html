@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Synchronous Remote Trivia</title>
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+  <style>
+    /* PASTEL & NEUTRAL THEME VARIABLES */
+    :root {
+      --bg: #f8f6f0;
+      --card-bg: #ffffff;
+      --text: #3c3a36;
+      --muted: #7d7871;
+      --border: #e6e2d8;
+      
+      --accent: #92a8d1;
+      --accent-hover: #7b93be;
+      --badge-bg: #e8eef5;
+      --badge-text: #50678d;
+
+      --buzzer-bg: radial-gradient(circle, #f7cac9 0%, #f3a8a6 100%);
+      --buzzer-border: #f8dada;
+      --buzzer-shadow: #d88987;
+      
+      --gold: #d9a05b;
+      --green: #88b04b;
+      --red: #e07a5f;
+    }
+
+    [data-theme="dark"] {
+      --bg: #22252a;
+      --card-bg: #2d3138;
+      --text: #e2e0db;
+      --muted: #9e9a93;
+      --border: #3d424b;
+
+      --accent: #8298c1;
+      --accent-hover: #6c82ab;
+      --badge-bg: #373e4b;
+      --badge-text: #b3c5e5;
+
+      --buzzer-bg: radial-gradient(circle, #d99a98 0%, #b86e6c 100%);
+      --buzzer-border: #e3b2b1;
+      --buzzer-shadow: #854846;
+      
+      --gold: #e2b072;
+      --green: #98be5e;
+      --red: #e08369;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease; }
+    body { background-color: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; position: relative; }
+
+    .theme-toggle { position: absolute; top: 20px; right: 20px; background: var(--card-bg); color: var(--text); border: 1px solid var(--border); border-radius: 20px; padding: 8px 16px; font-size: 0.85rem; font-weight: 600; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+
+    .container { width: 100%; max-width: 850px; background: var(--card-bg); border-radius: 20px; padding: 36px; box-shadow: 0 10px 30px rgba(0,0,0,0.04); border: 1px solid var(--border); }
+    
+    .screen { display: none; flex-direction: column; gap: 24px; }
+    .screen.active { display: flex; }
+
+    h1 { color: var(--text); font-size: 1.8rem; text-align: center; font-weight: 600; letter-spacing: -0.5px; }
+    .subtitle { text-align: center; color: var(--muted); margin-top: -12px; margin-bottom: 12px; font-size: 0.95rem; }
+
+    input, button { font-size: 1rem; padding: 12px 20px; border-radius: 10px; border: none; outline: none; }
+    input { background: var(--bg); color: var(--text); width: 100%; border: 1px solid var(--border); }
+    button { background: var(--accent); color: #ffffff; font-weight: 600; cursor: pointer; transition: transform 0.15s ease, background 0.15s ease; }
+    button:hover { background: var(--accent-hover); transform: translateY(-1px); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    .lobby-options { display: flex; flex-direction: column; gap: 16px; }
+    .divider { text-align: center; color: var(--muted); font-size: 0.85rem; margin: 8px 0; text-transform: uppercase; letter-spacing: 1px; }
+
+    .scoreboard { display: flex; justify-content: space-between; background: var(--bg); padding: 18px 24px; border-radius: 14px; border: 1px solid var(--border); }
+    .score-card { text-align: center; }
+    .score-card .name { font-size: 0.8rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; }
+    .score-card .points { font-size: 2rem; font-weight: 700; color: var(--gold); margin-top: 2px; }
+
+    .category-badge { align-self: center; background: var(--badge-bg); color: var(--badge-text); border: 1px solid var(--border); padding: 6px 18px; border-radius: 20px; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+    
+    .question-box { background: var(--bg); border-radius: 14px; padding: 32px; min-height: 160px; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 1.25rem; font-weight: 500; line-height: 1.6; border: 1px solid var(--border); color: var(--text); }
+
+    .buzzer-btn { height: 120px; background: var(--buzzer-bg); color: #ffffff; font-size: 1.6rem; font-weight: 800; border-radius: 18px; border: 4px solid var(--buzzer-border); box-shadow: 0 8px 0 var(--buzzer-shadow), 0 12px 20px rgba(0,0,0,0.08); cursor: pointer; text-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+    .buzzer-btn:active:not(:disabled) { transform: translateY(6px); box-shadow: 0 2px 0 var(--buzzer-shadow), 0 4px 10px rgba(0,0,0,0.08); }
+    .buzzer-btn.locked { background: var(--bg); border-color: var(--border); box-shadow: none; color: var(--muted); text-shadow: none; }
+
+    .status-banner { text-align: center; font-weight: 600; font-size: 1.05rem; min-height: 28px; color: var(--gold); }
+    
+    .host-controls { display: flex; gap: 12px; margin-top: 10px; }
+    .host-controls button { flex: 1; }
+    .btn-correct { background: var(--green); }
+    .btn-incorrect { background: var(--red); }
+
+    .answer-key { background: var(--bg); padding: 14px; border-radius: 10px; border: 1px dashed var(--gold); color: var(--gold); text-align: center; font-weight: 600; }
+  </style>
+</head>
+<body>
+
+<button class="theme-toggle" onclick="toggleTheme()" id="theme-btn">🌙 Dark Mode</button>
+
+<div class="container">
+  <!-- LOBBY SCREEN -->
+  <div id="screen-lobby" class="screen active">
+    <h1>Remote Trivia</h1>
+    <p class="subtitle">Synchronous Real-Time Head-to-Head Trivia</p>
+    
+    <div class="lobby-options">
+      <div>
+        <label style="display:block; margin-bottom: 6px; font-size:0.85rem; color: var(--muted); font-weight: 500;">Your Display Name</label>
+        <input type="text" id="username" placeholder="Enter name...">
+      </div>
+
+      <button id="btn-host" onclick="hostGame()">Host New Game</button>
+      
+      <div class="divider">OR</div>
+      
+      <div style="display:flex; gap: 10px;">
+        <input type="text" id="join-id" placeholder="Paste Host Peer ID here">
+        <button onclick="joinGame()">Join</button>
+      </div>
+    </div>
+    
+    <div id="lobby-status" class="status-banner" style="margin-top: 10px;"></div>
+  </div>
+
+  <!-- GAMEPLAY SCREEN -->
+  <div id="screen-game" class="screen">
+    <div class="scoreboard">
+      <div class="score-card">
+        <div class="name" id="p1-label">Player 1</div>
+        <div class="points" id="p1-score">0</div>
+      </div>
+      <div class="score-card">
+        <div class="name" id="p2-label">Player 2</div>
+        <div class="points" id="p2-score">0</div>
+      </div>
+    </div>
+
+    <div class="category-badge" id="category">Category</div>
+
+    <div class="question-box" id="question">Waiting for host to start...</div>
+
+    <div id="status-banner" class="status-banner">Ready to Buzz!</div>
+
+    <button id="buzzer" class="buzzer-btn" onclick="buzzIn()">BUZZ IN (SPACEBAR)</button>
+
+    <!-- HOST CONTROLS PANEL -->
+    <div id="host-panel" style="display: none; flex-direction: column; gap: 12px; margin-top: 10px;">
+      <div id="answer-key" class="answer-key">Answer: -</div>
+      <div class="host-controls">
+        <button class="btn-correct" onclick="judgeAnswer(true)">✓ Correct (+100)</button>
+        <button class="btn-incorrect" onclick="judgeAnswer(false)">✗ Incorrect (-50)</button>
+      </div>
+      <button style="background: var(--muted);" onclick="nextQuestion()">Next Question →</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const questions = [
+    // --- WORLD HISTORY (20 QUESTIONS) ---
+    { cat: "World History", q: "Which 1648 peace treaties ended the Thirty Years' War and established the modern concept of nation-state sovereignty?", a: "Peace of Westphalia" },
+    { cat: "World History", q: "Who was the first ruler to unify China under a single empire in 221 BCE, beginning the imperial era?", a: "Qin Shi Huang" },
+    { cat: "World History", q: "The 1839 Taiping Rebellion in China was led by Hong Xiuquan, who claimed to be the younger brother of which religious figure?", a: "Jesus Christ" },
+    { cat: "World History", q: "Which Byzantine Emperor commissioned the landmark legal code 'Corpus Juris Civilis' and rebuilt the Hagia Sophia in the 6th century?", a: "Justinian I (Justinian the Great)" },
+    { cat: "World History", q: "In 1905, which conflict marked the first time in modern history that an Asian power defeated a European imperial power?", a: "Russo-Japanese War" },
+    { cat: "World History", q: "Which Mayan city in the northern Yucatán Peninsula features the famous stepped pyramid known as 'El Castillo'?", a: "Chichen Itza" },
+    { cat: "World History", q: "What was the name of the secret 1916 agreement between Britain and France dividing the Ottoman Middle East into spheres of control?", a: "Sykes-Picot Agreement" },
+    { cat: "World History", q: "Which French monarch was known as the 'Sun King' and consolidated absolutist power at the Palace of Versailles?", a: "Louis XIV" },
+    { cat: "World History", q: "In 1520, which naval commander entered the ocean he named 'Mar Pacífico' after navigating the stormy straits near Tierra del Fuego?", a: "Ferdinand Magellan" },
+    { cat: "World History", q: "What event in July 1789, involving the storming of a medieval fortress, is widely cited as the start of the French Revolution?", a: "Storming of the Bastille" },
+    { cat: "World History", q: "Which 1066 battle resulted in the death of King Harold II and established Norman control over Anglo-Saxon England?", a: "Battle of Hastings" },
+    { cat: "World History", q: "During World War II, which massive 1942–1943 eastern front battle is considered the deadliest military engagement in human history?", a: "Battle of Stalingrad" },
+    { cat: "World History", q: "Who was the last ruling pharaoh of the Ptolemaic Kingdom of Egypt before it became a Roman province?", a: "Cleopatra VII" },
+    { cat: "World History", q: "Which maritime republic was ruled for centuries by an elected chief magistrate known as the 'Doge'?", a: "Republic of Venice" },
+    { cat: "World History", q: "What 1215 English document limited the absolute power of the monarch and laid early foundations for constitutional law?", a: "Magna Carta" },
+    { cat: "World History", q: "Which African empire was ruled in the 14th century by Mansa Musa, widely considered one of the wealthiest individuals in history?", a: "Mali Empire" },
+    { cat: "World History", q: "What 1815 naval/land battle saw the final military defeat of Napoleon Bonaparte at the hands of Wellington and Blücher?", a: "Battle of Waterloo" },
+    { cat: "World History", q: "Which 5th-century leader of the Huns was dubbed 'The Scourge of God' by contemporary Roman chroniclers?", a: "Attila the Hun" },
+    { cat: "World History", q: "Which city served as the intellectual capital of the Italian Renaissance under the sponsorship of the Medici family?", a: "Florence" },
+    { cat: "World History", q: "What 1900 anti-imperialist uprising in China was led by the 'Militia United in Righteousness' against foreign influence?", a: "Boxer Rebellion" },
+
+    // --- ISLAMIC HISTORY (20 QUESTIONS) ---
+    { cat: "Islamic History", q: "Which battle in 624 CE saw a smaller Muslim force secure a historic early victory during the month of Ramadan?", a: "Battle of Badr" },
+    { cat: "Islamic History", q: "Who was appointed as the first official Mu'azzin (caller to prayer) by Prophet Muhammad (PBUH)?", a: "Bilal ibn Rabah (RA)" },
+    { cat: "Islamic History", q: "In 711 CE, which Muslim general led the Umayyad expansion across the Strait of Gibraltar into Hispania?", a: "Tariq ibn Ziyad" },
+    { cat: "Islamic History", q: "Which major intellectual institute, established in Baghdad during the Abbasid era, served as a center for translation and scientific discovery?", a: "House of Wisdom (Bayt al-Hikmah)" },
+    { cat: "Islamic History", q: "Who founded the Ayyubid Dynasty and recaptured Jerusalem from the Crusaders in 1187 following the Battle of Hattin?", a: "Saladin (Salah ad-Din Al-Ayyubi)" },
+    { cat: "Islamic History", q: "Which city served as the capital of the Umayyad Caliphate from 661 to 750 CE?", a: "Damascus" },
+    { cat: "Islamic History", q: "Which Muslim polymath wrote 'The Canon of Medicine', a standard medical text in Europe and the Middle East for centuries?", a: "Ibn Sina (Avicenna)" },
+    { cat: "Islamic History", q: "In 1453, which Ottoman Sultan conquered Constantinople at age 21, effectively ending the Byzantine Empire?", a: "Sultan Mehmed II (Mehmed the Conqueror)" },
+    { cat: "Islamic History", q: "Famous traveler and jurist Ibn Battuta set out on his 30-year journey across the Afro-Eurasian landmass from which North African city?", a: "Tangier (Morocco)" },
+    { cat: "Islamic History", q: "Which Mughal Emperor commissioned the Taj Mahal in Agra as a mausoleum for his favorite wife, Mumtaz Mahal?", a: "Shah Jahan" },
+    { cat: "Islamic History", q: "What 1258 siege and sacking by Mongol forces under Hulagu Khan marked the end of the Golden Age of Baghdad?", a: "Siege of Baghdad" },
+    { cat: "Islamic History", q: "Which university in Fez, Morocco, founded in 859 CE by Fatima al-Fihri, is recognized by UNESCO as the oldest operating university in the world?", a: "University of al-Qarawiyyin" },
+    { cat: "Islamic History", q: "Who was the fourth Rightly Guided Caliph (Rashidun Caliphate), known for his eloquence and wisdom?", a: "Ali ibn Abi Talib (RA)" },
+    { cat: "Islamic History", q: "The Great Mosque of Córdoba (La Mezquita) was constructed during the rule of which Islamic dynasty in Al-Andalus?", a: "Umayyad Dynasty" },
+    { cat: "Islamic History", q: "Which Muslim scholar and mathematician authored 'Kitab al-Jabr' in the 9th century, laying the foundation for modern algebra?", a: "Al-Khwarizmi" },
+    { cat: "Islamic History", q: "In 1260 CE, which battle saw the Mamluks defeat the invading Mongol army in Palestine, halting their westward expansion?", a: "Battle of Ain Jalut" },
+    { cat: "Islamic History", q: "Which 14th-century North African scholar wrote the 'Muqaddimah', introducing early principles of sociology and economics?", a: "Ibn Khaldun" },
+    { cat: "Islamic History", q: "The Topkapi Palace served as the primary administrative seat and official residence for the rulers of which empire for nearly 400 years?", a: "Ottoman Empire" },
+    { cat: "Islamic History", q: "Under whose caliphate was the compilation of the official standardized Quranic text (Mus'haf) completed and distributed?", a: "Uthman ibn Affan (RA)" },
+    { cat: "Islamic History", q: "Which dynasty established Cairo as its capital in 969 CE and built the historic Al-Azhar Mosque?", a: "Fatimid Caliphate" },
+
+    // --- AMATEUR LAW (20 QUESTIONS) ---
+    { cat: "Amateur Law", q: "In criminal law, what Latin phrase meaning 'guilty mind' refers to the mental element or intention required to constitute a crime?", a: "Mens Rea" },
+    { cat: "Amateur Law", q: "What landmark 1966 U.S. Supreme Court decision established that suspects must be informed of their rights prior to police interrogation?", a: "Miranda v. Arizona" },
+    { cat: "Amateur Law", q: "In tort law, what principle holds an employer legally responsible for the wrongful acts committed by an employee within the scope of employment?", a: "Vicarious Liability (or Respondeat Superior)" },
+    { cat: "Amateur Law", q: "What legal standard of proof is required to secure a conviction in a criminal trial in common law jurisdictions?", a: "Beyond a reasonable doubt" },
+    { cat: "Amateur Law", q: "In contract law, what essential element refers to the bargained-for exchange of value between parties needed to make a contract enforceable?", a: "Consideration" },
+    { cat: "Amateur Law", q: "What Latin term, meaning 'to stand by things decided', refers to the legal doctrine of following precedent in court rulings?", a: "Stare Decisis" },
+    { cat: "Amateur Law", q: "What is the legal term for out-of-court, written or spoken statements made by a non-witness offered to prove the truth of the matter asserted (generally inadmissible)?", a: "Hearsay" },
+    { cat: "Amateur Law", q: "Under copyright law, what legal doctrine allows limited use of copyrighted material without permission for purposes such as criticism, news reporting, or teaching?", a: "Fair Use" },
+    { cat: "Amateur Law", q: "What Latin prerogative writ requires a person under arrest to be brought before a judge to determine the legality of their detention?", a: "Habeas Corpus" },
+    { cat: "Amateur Law", q: "In tort law, what key four elements must a plaintiff prove to establish negligence: Duty, Breach, Causation, and what fourth element?", a: "Damages (or Injury)" },
+    { cat: "Amateur Law", q: "What rule excludes evidence collected or analyzed in violation of the defendant's constitutional rights from being used in court?", a: "Exclusionary Rule" },
+    { cat: "Amateur Law", q: "What legal term describes a civil wrong (other than a breach of contract) that unfairly causes someone else to suffer loss or harm?", a: "Tort" },
+    { cat: "Amateur Law", q: "What clause in Article I of the U.S. Constitution prohibits the government from passing laws that retroactively punish actions that were legal when committed?", a: "Ex Post Facto Clause" },
+    { cat: "Amateur Law", q: "In property law, what process allows a squatter to gain legal ownership of land by continuously occupying it without permission for a statutory period?", a: "Adverse Possession" },
+    { cat: "Amateur Law", q: "What type of law governs disputes between private individuals or organizations, as opposed to offenses against the state?", a: "Civil Law" },
+    { cat: "Amateur Law", q: "In evidence law, what rule prohibits a party from introducing oral evidence to contradict the clear written terms of an integrated contract?", a: "Parol Evidence Rule" },
+    { cat: "Amateur Law", q: "What defense in criminal law asserts that law enforcement agents induced a person to commit a crime they otherwise would not have committed?", a: "Entrapment" },
+    { cat: "Amateur Law", q: "What 1803 Supreme Court case established the principle of judicial review in the United States?", a: "Marbury v. Madison" },
+    { cat: "Amateur Law", q: "What legal rule establishes that evidence derived from illegally obtained evidence is also inadmissible in court?", a: "Fruit of the Poisonous Tree" },
+    { cat: "Amateur Law", q: "What Latin term meaning 'in bad faith' refers to intentional dishonesty or breach of a contractual duty?", a: "Mala Fide" },
+
+    // --- POP CULTURE & MUSIC (20 QUESTIONS) ---
+    { cat: "Pop Culture & Music", q: "Which iconic 1982 Michael Jackson album became the best-selling album of all time, produced by Quincy Jones?", a: "Thriller" },
+    { cat: "Pop Culture & Music", q: "What is the name of the fictional kingdom in which Marvel's Black Panther is set and ruled?", a: "Wakanda" },
+    { cat: "Pop Culture & Music", q: "Which British band released the critically acclaimed 1997 album 'OK Computer'?", a: "Radiohead" },
+    { cat: "Pop Culture & Music", q: "Who directed the groundbreaking 1994 film 'Pulp Fiction'?", a: "Quentin Tarantino" },
+    { cat: "Pop Culture & Music", q: "Which female artist holds the record for the most Grammy Award wins in history?", a: "Beyoncé" },
+    { cat: "Pop Culture & Music", q: "In 'The Matrix' trilogy, what is the true identity and birth name of the protagonist known as Neo?", a: "Thomas Anderson" },
+    { cat: "Pop Culture & Music", q: "Which hip-hop group from Staten Island released the seminal 1993 debut album 'Enter the Wu-Tang (36 Chambers)'?", a: "Wu-Tang Clan" },
+    { cat: "Pop Culture & Music", q: "What feature-length animated film was Disney's first full-length animated feature, released in 1937?", a: "Snow White and the Seven Dwarfs" },
+    { cat: "Pop Culture & Music", q: "Who recorded the iconic 1971 protest album 'What's Going On' for Motown Records?", a: "Marvin Gaye" },
+    { cat: "Pop Culture & Music", q: "In the HBO series 'Game of Thrones', what is the ancestral home and seat of House Stark?", a: "Winterfell" },
+    { cat: "Pop Culture & Music", q: "Which artist created the famous 1962 pop-art screenprints titled 'Campbell's Soup Cans'?", a: "Andy Warhol" },
+    { cat: "Pop Culture & Music", q: "Which rock band's legendary lead guitarist was nicknamed 'Slowhand'?", a: "Eric Clapton" },
+    { cat: "Pop Culture & Music", q: "What 1999 film starred Brad Pitt and Edward Norton as founders of an underground fight club?", a: "Fight Club" },
+    { cat: "Pop Culture & Music", q: "Which Canadian rapper launched his music career after starring on the teen drama series 'Degrassi: The Next Generation'?", a: "Drake" },
+    { cat: "Pop Culture & Music", q: "What was the highest-grossing film worldwide at the box office before 'Avatar' surpassed it in 2009?", a: "Titanic" },
+    { cat: "Pop Culture & Music", q: "Which electronic music duo composed the soundtrack for the 2010 Disney film 'Tron: Legacy' while wearing robotic helmets?", a: "Daft Punk" },
+    { cat: "Pop Culture & Music", q: "Who played the character of Walter White in the hit AMC drama series 'Breaking Bad'?", a: "Bryan Cranston" },
+    { cat: "Pop Culture & Music", q: "Which famous music festival took place in upstate New York in August 1969, billed as 'An Aquarian Exposition: 3 Days of Peace & Music'?", a: "Woodstock" },
+    { cat: "Pop Culture & Music", q: "What anime series follows the story of Shinji Ikari piloting a giant biomechanical mecha to fight mysterious entities known as Angels?", a: "Neon Genesis Evangelion" },
+    { cat: "Pop Culture & Music", q: "Which artist famously sang 'Purple Rain' and performed the 2007 Super Bowl XLI halftime show in the pouring rain?", a: "Prince" }
+  ];
+
+  let peer = null;
+  let conn = null;
+  let isHost = false;
+  let myName = "";
+  let opponentName = "Opponent";
+  
+  let currentQIndex = 0;
+  let scores = { host: 0, guest: 0 };
+  let buzzedPlayer = null;
+  let state = "LOBBY";
+
+  const p1Label = document.getElementById('p1-label');
+  const p2Label = document.getElementById('p2-label');
+  const p1Score = document.getElementById('p1-score');
+  const p2Score = document.getElementById('p2-score');
+  const categoryElem = document.getElementById('category');
+  const questionElem = document.getElementById('question');
+  const statusElem = document.getElementById('status-banner');
+  const buzzerElem = document.getElementById('buzzer');
+  const hostPanel = document.getElementById('host-panel');
+  const answerKeyElem = document.getElementById('answer-key');
+
+  function toggleTheme() {
+    const body = document.body;
+    const btn = document.getElementById('theme-btn');
+    if (body.getAttribute('data-theme') === 'dark') {
+      body.removeAttribute('data-theme');
+      btn.innerText = '🌙 Dark Mode';
+    } else {
+      body.setAttribute('data-theme', 'dark');
+      btn.innerText = '☀️ Light Mode';
+    }
+  }
+
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space' && !e.repeat) {
+      e.preventDefault();
+      buzzIn();
+    }
+  });
+
+  function hostGame() {
+    myName = document.getElementById('username').value.trim() || "Host";
+    isHost = true;
+    peer = new Peer();
+
+    document.getElementById('lobby-status').innerText = "Generating Room ID...";
+
+    peer.on('open', (id) => {
+      document.getElementById('lobby-status').innerHTML = `Room ID: <b style="color:var(--text);">${id}</b><br><span style="font-size:0.8rem; font-weight:normal; color:var(--muted);">Share this ID with Player 2</span>`;
+    });
+
+    peer.on('connection', (c) => {
+      conn = c;
+      setupConnection();
+    });
+  }
+
+  function joinGame() {
+    myName = document.getElementById('username').value.trim() || "Guest";
+    const hostId = document.getElementById('join-id').value.trim();
+    if (!hostId) return alert("Please enter a Host Peer ID");
+
+    isHost = false;
+    peer = new Peer();
+
+    peer.on('open', () => {
+      conn = peer.connect(hostId);
+      setupConnection();
+    });
+  }
+
+  function setupConnection() {
+    conn.on('open', () => {
+      conn.send({ type: 'HANDSHAKE', name: myName });
+
+      document.getElementById('screen-lobby').classList.remove('active');
+      document.getElementById('screen-game').classList.add('active');
+
+      if (isHost) {
+        hostPanel.style.display = 'flex';
+        p1Label.innerText = `${myName} (Host)`;
+        loadQuestion(0);
+      } else {
+        p2Label.innerText = `${myName} (Guest)`;
+      }
+    });
+
+    conn.on('data', (data) => handleData(data));
+  }
+
+  function handleData(data) {
+    switch(data.type) {
+      case 'HANDSHAKE':
+        opponentName = data.name;
+        if (isHost) p2Label.innerText = opponentName;
+        else p1Label.innerText = opponentName;
+        break;
+
+      case 'SYNC_STATE':
+        scores = data.scores;
+        currentQIndex = data.qIndex;
+        state = data.state;
+        buzzedPlayer = data.buzzedPlayer;
+        
+        categoryElem.innerText = questions[currentQIndex].cat;
+        questionElem.innerText = questions[currentQIndex].q;
+        
+        updateUI();
+        break;
+
+      case 'BUZZ':
+        if (isHost && state === 'QUESTION') {
+          state = 'BUZZED';
+          buzzedPlayer = data.player;
+          broadcastState();
+        }
+        break;
+    }
+  }
+
+  function broadcastState() {
+    const payload = {
+      type: 'SYNC_STATE',
+      scores: scores,
+      qIndex: currentQIndex,
+      state: state,
+      buzzedPlayer: buzzedPlayer
+    };
+    if (conn) conn.send(payload);
+    handleData(payload);
+  }
+
+  function buzzIn() {
+    if (state !== 'QUESTION') return;
+    
+    if (isHost) {
+      state = 'BUZZED';
+      buzzedPlayer = 'host';
+      broadcastState();
+    } else {
+      conn.send({ type: 'BUZZ', player: 'guest' });
+    }
+  }
+
+  function loadQuestion(index) {
+    currentQIndex = index;
+    state = 'QUESTION';
+    buzzedPlayer = null;
+    answerKeyElem.innerText = `Answer: ${questions[index].a}`;
+    broadcastState();
+  }
+
+  function judgeAnswer(isCorrect) {
+    if (state !== 'BUZZED') return;
+
+    if (isCorrect) {
+      scores[buzzedPlayer] += 100;
+      state = 'REVEALED';
+    } else {
+      scores[buzzedPlayer] -= 50;
+      state = 'QUESTION';
+      buzzedPlayer = null;
+    }
+    broadcastState();
+  }
+
+  function nextQuestion() {
+    if (currentQIndex + 1 < questions.length) {
+      loadQuestion(currentQIndex + 1);
+    } else {
+      alert("Game Over! Final Scores:\n" + p1Label.innerText + ": " + scores.host + "\n" + p2Label.innerText + ": " + scores.guest);
+    }
+  }
+
+  function updateUI() {
+    p1Score.innerText = scores.host;
+    p2Score.innerText = scores.guest;
+
+    if (state === 'QUESTION') {
+      statusElem.innerText = "⚡ BUZZERS OPEN! ⚡";
+      statusElem.style.color = "var(--gold)";
+      buzzerElem.disabled = false;
+      buzzerElem.classList.remove('locked');
+    } else if (state === 'BUZZED') {
+      const winnerName = buzzedPlayer === 'host' ? p1Label.innerText : p2Label.innerText;
+      statusElem.innerText = `🚨 ${winnerName} BUZZED IN!`;
+      statusElem.style.color = "var(--green)";
+      buzzerElem.disabled = true;
+      buzzerElem.classList.add('locked');
+    } else if (state === 'REVEALED') {
+      statusElem.innerText = `Point Awarded! Waiting for next question...`;
+      statusElem.style.color = "var(--text)";
+      buzzerElem.disabled = true;
+      buzzerElem.classList.add('locked');
+    }
+  }
+</script>
+</body>
+</html>
