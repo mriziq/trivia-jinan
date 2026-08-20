@@ -292,6 +292,7 @@
     myName = document.getElementById('username').value.trim() || "Host";
     isHost = true;
     peer = new Peer();
+    reportErrors(peer);
 
     document.getElementById('lobby-status').innerText = "Generating Room ID...";
 
@@ -312,10 +313,27 @@
 
     isHost = false;
     peer = new Peer();
+    reportErrors(peer);
+
+    document.getElementById('lobby-status').innerText = "Connecting...";
 
     peer.on('open', () => {
-      conn = peer.connect(hostId);
+      conn = peer.connect(hostId, { reliable: true });
       setupConnection();
+      // ponytail: 10s timeout, if the channel never opens tell the user instead of hanging silently
+      setTimeout(() => {
+        if (!conn.open) document.getElementById('lobby-status').innerText =
+          "Could not connect. Check the Room ID (it's case-sensitive) and both try refreshing.";
+      }, 10000);
+    });
+  }
+
+  function reportErrors(p) {
+    p.on('error', (err) => {
+      document.getElementById('lobby-status').innerText =
+        err.type === 'peer-unavailable'
+          ? "No host found with that Room ID. Check for typos — it's case-sensitive."
+          : "Connection error: " + err.type;
     });
   }
 
