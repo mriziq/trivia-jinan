@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Synchronous Remote Trivia</title>
+  <title>Amer & Jinan's Trivia :~)</title>
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <style>
     /* PASTEL & NEUTRAL THEME VARIABLES */
@@ -101,7 +101,7 @@
 <div class="container">
   <!-- LOBBY SCREEN -->
   <div id="screen-lobby" class="screen active">
-    <h1>Remote Trivia</h1>
+    <h1>Amer & Jinan's Trivia :~)</h1>
     <p class="subtitle">Synchronous Real-Time Head-to-Head Trivia</p>
     
     <div class="lobby-options">
@@ -146,6 +146,13 @@
     <button id="buzzer" class="buzzer-btn" onclick="buzzIn()">BUZZ IN (SPACEBAR)</button>
 
     <div id="choices" style="display:none; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px;"></div>
+
+    <!-- HOST: CATEGORY SETUP (shown once both players are in) -->
+    <div id="setup-panel" style="display:none; flex-direction:column; gap:10px; margin-top:14px; text-align:left;">
+      <div style="font-weight:600;">Pick categories for this round:</div>
+      <div id="cat-boxes" style="display:flex; flex-direction:column; gap:6px;"></div>
+      <button onclick="startRound()">Start Round ▶</button>
+    </div>
 
     <button id="btn-close" style="display:none; background: var(--red); width:100%; margin-top:10px;" onclick="closeRoom()">Close Room</button>
   </div>
@@ -384,12 +391,8 @@
       conn.send({ type: 'HANDSHAKE', name: myName });
 
       if (isHost) {
-        // Game starts only once a player is in; shuffled order mixes the categories
-        if (state === 'LOBBY') {
-          order = questions.map((_, i) => i).sort(() => Math.random() - 0.5);
-          pos = 0;
-          loadQuestion(order[0]);
-        }
+        if (state === 'LOBBY') state = 'SETUP';
+        if (state === 'SETUP') showSetup();
         else broadcastState(); // rejoin mid-game: sync to current question/scores
       } else {
         document.getElementById('screen-lobby').classList.remove('active');
@@ -448,6 +451,14 @@
       case 'ANSWER':
         if (isHost && buzzedPlayer === 'guest') resolveAnswer(data.idx);
         break;
+
+      case 'WAIT_SETUP':
+        questionElem.innerText = 'Host is picking the categories...';
+        break;
+
+      case 'COUNTDOWN':
+        runCountdown();
+        break;
     }
   }
 
@@ -488,6 +499,37 @@
     choices = [q.a, ...q.d].sort(() => Math.random() - 0.5);
     correctIdx = choices.indexOf(q.a);
     broadcastState();
+  }
+
+  function showSetup() {
+    conn.send({ type: 'WAIT_SETUP' });
+    questionElem.innerText = 'Pick categories below, then start the round!';
+    const cats = [...new Set(questions.map(q => q.cat))];
+    document.getElementById('cat-boxes').innerHTML = cats.map(c =>
+      `<label style="display:flex; gap:8px; align-items:center;"><input type="checkbox" value="${c}" checked> ${c}</label>`
+    ).join('');
+    document.getElementById('setup-panel').style.display = 'flex';
+  }
+
+  function startRound() {
+    const picked = [...document.querySelectorAll('#cat-boxes input:checked')].map(b => b.value);
+    if (!picked.length) return alert('Pick at least one category');
+    order = questions.map((_, i) => i).filter(i => picked.includes(questions[i].cat)).sort(() => Math.random() - 0.5);
+    pos = 0;
+    document.getElementById('setup-panel').style.display = 'none';
+    conn.send({ type: 'COUNTDOWN' });
+    runCountdown(() => loadQuestion(order[0]));
+  }
+
+  function runCountdown(done) {
+    let n = 3;
+    statusElem.innerText = 'Get ready!';
+    const tick = () => {
+      if (n > 0) { questionElem.innerText = n--; setTimeout(tick, 1000); }
+      else if (done) done();
+      else questionElem.innerText = '...';
+    };
+    tick();
   }
 
   // Host-side stall penalty: -10 every 5s while buzzed; at 30s the buzz is released
