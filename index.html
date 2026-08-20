@@ -147,10 +147,6 @@
 
     <div id="choices" style="display:none; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px;"></div>
 
-    <!-- HOST CONTROLS PANEL -->
-    <div id="host-panel" style="display: none; flex-direction: column; gap: 12px; margin-top: 10px;">
-      <button style="background: var(--muted);" onclick="nextQuestion()">Next Question →</button>
-    </div>
     <button id="btn-close" style="display:none; background: var(--red); width:100%; margin-top:10px;" onclick="closeRoom()">Close Room</button>
   </div>
 </div>
@@ -265,7 +261,6 @@
   const questionElem = document.getElementById('question');
   const statusElem = document.getElementById('status-banner');
   const buzzerElem = document.getElementById('buzzer');
-  const hostPanel = document.getElementById('host-panel');
   const choicesElem = document.getElementById('choices');
 
   let choices = [];      // 4 answer options for the current question
@@ -388,7 +383,6 @@
 
       if (isHost) {
         // Game starts only once a player is in
-        hostPanel.style.display = 'flex';
         if (state === 'LOBBY') loadQuestion(0);
         else broadcastState(); // rejoin mid-game: sync to current question/scores
       } else {
@@ -405,7 +399,6 @@
         // Guest left — pause and keep the room open for a new player
         conn = null;
         p2Label.innerText = 'Waiting for player...';
-        hostPanel.style.display = 'none';
         questionElem.innerText = 'Player left. Waiting for someone to join...';
       } else {
         alert('The host closed the room.');
@@ -500,6 +493,8 @@
     if (i === correctIdx) {
       scores[buzzedPlayer] += 100;
       state = 'REVEALED';
+      // Auto-advance; guard in case the guest left or the room closed during the delay
+      setTimeout(() => { if (state === 'REVEALED' && conn) nextQuestion(); }, 4000);
     } else {
       scores[buzzedPlayer] -= 50;
       wrongIdxs.push(i);
@@ -544,7 +539,7 @@
       buzzerElem.disabled = true;
       buzzerElem.classList.add('locked');
     } else if (state === 'REVEALED') {
-      statusElem.innerText = `Point Awarded! Waiting for next question...`;
+      statusElem.innerText = `✅ Correct! Next question in a few seconds...`;
       statusElem.style.color = "var(--text)";
       buzzerElem.disabled = true;
       buzzerElem.classList.add('locked');
