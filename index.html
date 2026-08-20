@@ -263,6 +263,8 @@
   const buzzerElem = document.getElementById('buzzer');
   const choicesElem = document.getElementById('choices');
 
+  let order = [];        // host's shuffled question order for this session
+  let pos = 0;           // position within `order`
   let choices = [];      // 4 answer options for the current question
   let correctIdx = -1;
   let wrongIdxs = [];    // options already picked wrong this question
@@ -382,8 +384,12 @@
       conn.send({ type: 'HANDSHAKE', name: myName });
 
       if (isHost) {
-        // Game starts only once a player is in
-        if (state === 'LOBBY') loadQuestion(0);
+        // Game starts only once a player is in; shuffled order mixes the categories
+        if (state === 'LOBBY') {
+          order = questions.map((_, i) => i).sort(() => Math.random() - 0.5);
+          pos = 0;
+          loadQuestion(order[0]);
+        }
         else broadcastState(); // rejoin mid-game: sync to current question/scores
       } else {
         document.getElementById('screen-lobby').classList.remove('active');
@@ -505,8 +511,9 @@
   }
 
   function nextQuestion() {
-    if (currentQIndex + 1 < questions.length) {
-      loadQuestion(currentQIndex + 1);
+    pos++;
+    if (pos < order.length) {
+      loadQuestion(order[pos]);
     } else {
       alert("Game Over! Final Scores:\n" + p1Label.innerText + ": " + scores.host + "\n" + p2Label.innerText + ": " + scores.guest);
     }
