@@ -153,8 +153,8 @@
         <button class="btn-incorrect" onclick="judgeAnswer(false)">✗ Incorrect (-50)</button>
       </div>
       <button style="background: var(--muted);" onclick="nextQuestion()">Next Question →</button>
-      <button style="background: var(--red);" onclick="closeRoom()">Close Room</button>
     </div>
+    <button id="btn-close" style="display:none; background: var(--red); width:100%; margin-top:10px;" onclick="closeRoom()">Close Room</button>
   </div>
 </div>
 
@@ -310,13 +310,13 @@
       // Host enters the room immediately; room stays open for joiners until closed
       document.getElementById('screen-lobby').classList.remove('active');
       document.getElementById('screen-game').classList.add('active');
-      hostPanel.style.display = 'flex';
       p1Label.innerText = `${myName} (Host)`;
       p2Label.innerText = 'Waiting for player...';
+      questionElem.innerText = 'Waiting for a player to join...';
+      document.getElementById('btn-close').style.display = 'block';
       const info = document.getElementById('room-info');
       info.style.display = 'block';
       info.innerHTML = `Room Code: <b style="color:var(--text); font-size:1.3rem; letter-spacing:3px;">${peer.currentCode}</b> <button onclick="navigator.clipboard.writeText('${peer.currentCode}')" style="padding:2px 8px; font-size:0.8rem;">Copy</button>`;
-      loadQuestion(0);
     });
 
     peer.on('connection', (c) => {
@@ -377,7 +377,10 @@
       conn.send({ type: 'HANDSHAKE', name: myName });
 
       if (isHost) {
-        broadcastState(); // sync the joiner to the current question/scores
+        // Game starts only once a player is in
+        hostPanel.style.display = 'flex';
+        if (state === 'LOBBY') loadQuestion(0);
+        else broadcastState(); // rejoin mid-game: sync to current question/scores
       } else {
         document.getElementById('screen-lobby').classList.remove('active');
         document.getElementById('screen-game').classList.add('active');
@@ -389,9 +392,11 @@
 
     conn.on('close', () => {
       if (isHost) {
-        // Guest left — keep the room open for a new player
+        // Guest left — pause and keep the room open for a new player
         conn = null;
         p2Label.innerText = 'Waiting for player...';
+        hostPanel.style.display = 'none';
+        questionElem.innerText = 'Player left. Waiting for someone to join...';
       } else {
         alert('The host closed the room.');
         location.reload();
