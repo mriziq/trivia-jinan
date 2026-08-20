@@ -145,13 +145,10 @@
 
     <button id="buzzer" class="buzzer-btn" onclick="buzzIn()">BUZZ IN (SPACEBAR)</button>
 
+    <div id="choices" style="display:none; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px;"></div>
+
     <!-- HOST CONTROLS PANEL -->
     <div id="host-panel" style="display: none; flex-direction: column; gap: 12px; margin-top: 10px;">
-      <div id="answer-key" class="answer-key">Answer: -</div>
-      <div class="host-controls">
-        <button class="btn-correct" onclick="judgeAnswer(true)">✓ Correct (+100)</button>
-        <button class="btn-incorrect" onclick="judgeAnswer(false)">✗ Incorrect (-50)</button>
-      </div>
       <button style="background: var(--muted);" onclick="nextQuestion()">Next Question →</button>
     </div>
     <button id="btn-close" style="display:none; background: var(--red); width:100%; margin-top:10px;" onclick="closeRoom()">Close Room</button>
@@ -269,7 +266,11 @@
   const statusElem = document.getElementById('status-banner');
   const buzzerElem = document.getElementById('buzzer');
   const hostPanel = document.getElementById('host-panel');
-  const answerKeyElem = document.getElementById('answer-key');
+  const choicesElem = document.getElementById('choices');
+
+  let choices = [];      // 4 answer options for the current question
+  let correctIdx = -1;
+  let wrongIdxs = [];    // options already picked wrong this question
 
   function toggleTheme() {
     const body = document.body;
@@ -426,10 +427,13 @@
         currentQIndex = data.qIndex;
         state = data.state;
         buzzedPlayer = data.buzzedPlayer;
-        
+        choices = data.choices;
+        correctIdx = data.correctIdx;
+        wrongIdxs = data.wrongIdxs;
+
         categoryElem.innerText = questions[currentQIndex].cat;
         questionElem.innerText = questions[currentQIndex].q;
-        
+
         updateUI();
         break;
 
@@ -440,6 +444,10 @@
           broadcastState();
         }
         break;
+
+      case 'ANSWER':
+        if (isHost && buzzedPlayer === 'guest') resolveAnswer(data.idx);
+        break;
     }
   }
 
@@ -449,7 +457,10 @@
       scores: scores,
       qIndex: currentQIndex,
       state: state,
-      buzzedPlayer: buzzedPlayer
+      buzzedPlayer: buzzedPlayer,
+      choices: choices,
+      correctIdx: correctIdx,
+      wrongIdxs: wrongIdxs
     };
     if (conn) conn.send(payload);
     handleData(payload);
@@ -471,18 +482,30 @@
     currentQIndex = index;
     state = 'QUESTION';
     buzzedPlayer = null;
-    answerKeyElem.innerText = `Answer: ${questions[index].a}`;
+    wrongIdxs = [];
+    // ponytail: distractors = answers from other questions in the same category
+    const q = questions[index];
+    const pool = questions.filter((o, i) => i !== index && o.cat === q.cat).map(o => o.a);
+    const distractors = pool.sort(() => Math.random() - 0.5).slice(0, 3);
+    choices = [q.a, ...distractors].sort(() => Math.random() - 0.5);
+    correctIdx = choices.indexOf(q.a);
     broadcastState();
   }
 
-  function judgeAnswer(isCorrect) {
-    if (state !== 'BUZZED') return;
+  function pickChoice(i) {
+    if (state !== 'BUZZED' || buzzedPlayer !== (isHost ? 'host' : 'guest')) return;
+    if (isHost) resolveAnswer(i);
+    else conn.send({ type: 'ANSWER', idx: i });
+  }
 
-    if (isCorrect) {
+  function resolveAnswer(i) { // host only
+    if (state !== 'BUZZED' || wrongIdxs.includes(i)) return;
+    if (i === correctIdx) {
       scores[buzzedPlayer] += 100;
       state = 'REVEALED';
     } else {
       scores[buzzedPlayer] -= 50;
+      wrongIdxs.push(i);
       state = 'QUESTION';
       buzzedPlayer = null;
     }
@@ -501,6 +524,17 @@
     p1Score.innerText = scores.host;
     p2Score.innerText = scores.guest;
 
+    const myTurn = state === 'BUZZED' && buzzedPlayer === (isHost ? 'host' : 'guest');
+    choicesElem.style.display = 'grid';
+    choicesElem.innerHTML = choices.map((c, i) => {
+      const wrong = wrongIdxs.includes(i);
+      const reveal = state === 'REVEALED' && i === correctIdx;
+      const style = `padding:12px; border-radius:10px; border:1px solid var(--border); font-size:0.95rem;`
+        + (reveal ? 'background:var(--green); color:#fff;' : wrong ? 'background:var(--border); color:var(--muted); text-decoration:line-through;' : 'background:var(--card-bg); color:var(--text);')
+        + (myTurn && !wrong ? '' : 'pointer-events:none; opacity:0.85;');
+      return `<button style="${style}" onclick="pickChoice(${i})">${c}</button>`;
+    }).join('');
+
     if (state === 'QUESTION') {
       statusElem.innerText = "⚡ BUZZERS OPEN! ⚡";
       statusElem.style.color = "var(--gold)";
@@ -508,7 +542,7 @@
       buzzerElem.classList.remove('locked');
     } else if (state === 'BUZZED') {
       const winnerName = buzzedPlayer === 'host' ? p1Label.innerText : p2Label.innerText;
-      statusElem.innerText = `🚨 ${winnerName} BUZZED IN!`;
+      statusElem.innerText = `🚨 ${winnerName} BUZZED IN! Pick an answer...`;
       statusElem.style.color = "var(--green)";
       buzzerElem.disabled = true;
       buzzerElem.classList.add('locked');
