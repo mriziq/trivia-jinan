@@ -125,6 +125,7 @@
 
   <!-- GAMEPLAY SCREEN -->
   <div id="screen-game" class="screen">
+    <div id="room-info" class="status-banner" style="display:none; margin-bottom: 10px;"></div>
     <div class="scoreboard">
       <div class="score-card">
         <div class="name" id="p1-label">Player 1</div>
@@ -152,6 +153,7 @@
         <button class="btn-incorrect" onclick="judgeAnswer(false)">✗ Incorrect (-50)</button>
       </div>
       <button style="background: var(--muted);" onclick="nextQuestion()">Next Question →</button>
+      <button style="background: var(--red);" onclick="closeRoom()">Close Room</button>
     </div>
   </div>
 </div>
@@ -297,13 +299,28 @@
     document.getElementById('lobby-status').innerText = "Generating Room ID...";
 
     peer.on('open', (id) => {
-      document.getElementById('lobby-status').innerHTML = `Room ID: <b style="color:var(--text);">${id}</b><br><span style="font-size:0.8rem; font-weight:normal; color:var(--muted);">Share this ID with Player 2</span>`;
+      // Host enters the room immediately; room stays open for joiners until closed
+      document.getElementById('screen-lobby').classList.remove('active');
+      document.getElementById('screen-game').classList.add('active');
+      hostPanel.style.display = 'flex';
+      p1Label.innerText = `${myName} (Host)`;
+      p2Label.innerText = 'Waiting for player...';
+      const info = document.getElementById('room-info');
+      info.style.display = 'block';
+      info.innerHTML = `Room ID: <b style="color:var(--text);">${id}</b> <button onclick="navigator.clipboard.writeText('${id}')" style="padding:2px 8px; font-size:0.8rem;">Copy</button>`;
+      loadQuestion(0);
     });
 
     peer.on('connection', (c) => {
+      if (conn && conn.open) { c.close(); return; } // ponytail: 2-player game, reject extra joiners
       conn = c;
       setupConnection();
     });
+  }
+
+  function closeRoom() {
+    if (peer) peer.destroy();
+    location.reload(); // ponytail: reload is the reset
   }
 
   function joinGame() {
@@ -341,19 +358,27 @@
     conn.on('open', () => {
       conn.send({ type: 'HANDSHAKE', name: myName });
 
-      document.getElementById('screen-lobby').classList.remove('active');
-      document.getElementById('screen-game').classList.add('active');
-
       if (isHost) {
-        hostPanel.style.display = 'flex';
-        p1Label.innerText = `${myName} (Host)`;
-        loadQuestion(0);
+        broadcastState(); // sync the joiner to the current question/scores
       } else {
+        document.getElementById('screen-lobby').classList.remove('active');
+        document.getElementById('screen-game').classList.add('active');
         p2Label.innerText = `${myName} (Guest)`;
       }
     });
 
     conn.on('data', (data) => handleData(data));
+
+    conn.on('close', () => {
+      if (isHost) {
+        // Guest left — keep the room open for a new player
+        conn = null;
+        p2Label.innerText = 'Waiting for player...';
+      } else {
+        alert('The host closed the room.');
+        location.reload();
+      }
+    });
   }
 
   function handleData(data) {
