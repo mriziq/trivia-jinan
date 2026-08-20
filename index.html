@@ -348,19 +348,27 @@
       setupConnection();
       // ponytail: 10s timeout, if the channel never opens tell the user instead of hanging silently
       setTimeout(() => {
-        if (!conn.open) document.getElementById('lobby-status').innerText =
-          "Could not connect. Make sure the host's room is still open, then try again.";
+        if (!conn.open && !errorShown) document.getElementById('lobby-status').innerText =
+          "Found the room but couldn't open a direct connection — likely a strict network (cellular/CGNAT). Try again, or have both players use Wi-Fi.";
       }, 10000);
     });
   }
 
+  let errorShown = false;
   function reportErrors(p) {
     p.on('error', (err) => {
       if (err.type === 'unavailable-id') { hostGame(); return; } // ponytail: code collision, just roll a new one
+      errorShown = true;
       document.getElementById('lobby-status').innerText =
         err.type === 'peer-unavailable'
-          ? "No room found with that code. Double-check it with the host."
+          ? "No room found with that code. Make sure the host's screen is on and their room is open, then double-check the code."
           : "Connection error: " + err.type;
+    });
+
+    // iOS Safari suspends the page when backgrounded, killing the signaling link — reconnect when possible
+    p.on('disconnected', () => { if (!p.destroyed) p.reconnect(); });
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && p.disconnected && !p.destroyed) p.reconnect();
     });
   }
 
