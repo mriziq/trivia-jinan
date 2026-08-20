@@ -295,12 +295,21 @@
   const codeToPeerId = (code) => 'trivia-jinan-' + code;
   const normalizeCode = (raw) => raw.toUpperCase().replace(/[^A-Z0-9]/g, '');
 
+  // TURN relay (Metered free tier) so players behind cellular/CGNAT can connect.
+  // The key is public by nature of a static site; quota is capped on the free plan.
+  const TURN_CREDS_URL = "https://mriziq.metered.live/api/v1/turn/credentials?apiKey=a220f5839677903e53ae1f6a138330934261";
+  let peerConfig = {}; // fallback: PeerJS default STUN if the fetch fails
+  fetch(TURN_CREDS_URL)
+    .then(r => r.json())
+    .then(ice => { if (Array.isArray(ice)) peerConfig = { config: { iceServers: ice } }; })
+    .catch(() => {});
+
   function hostGame() {
     myName = document.getElementById('username').value.trim() || "Host";
     isHost = true;
     let code = '';
     for (let i = 0; i < 4; i++) code += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
-    peer = new Peer(codeToPeerId(code));
+    peer = new Peer(codeToPeerId(code), peerConfig);
     reportErrors(peer);
     peer.currentCode = code;
 
@@ -338,7 +347,7 @@
     const hostId = codeToPeerId(code);
 
     isHost = false;
-    peer = new Peer();
+    peer = new Peer(peerConfig);
     reportErrors(peer);
 
     document.getElementById('lobby-status').innerText = "Connecting...";
