@@ -440,6 +440,7 @@
         if (isHost && state === 'QUESTION') {
           state = 'BUZZED';
           buzzedPlayer = data.player;
+          startBuzzTimer();
           broadcastState();
         }
         break;
@@ -471,6 +472,7 @@
     if (isHost) {
       state = 'BUZZED';
       buzzedPlayer = 'host';
+      startBuzzTimer();
       broadcastState();
     } else {
       conn.send({ type: 'BUZZ', player: 'guest' });
@@ -488,6 +490,25 @@
     broadcastState();
   }
 
+  // Host-side stall penalty: -10 every 5s while buzzed; at 30s the buzz is released
+  let buzzTimer = null, buzzTicks = 0;
+  function startBuzzTimer() {
+    stopBuzzTimer();
+    buzzTicks = 0;
+    buzzTimer = setInterval(() => {
+      if (state !== 'BUZZED') return stopBuzzTimer();
+      buzzTicks++;
+      scores[buzzedPlayer] -= 10;
+      if (buzzTicks >= 6) {
+        stopBuzzTimer();
+        state = 'QUESTION';
+        buzzedPlayer = null;
+      }
+      broadcastState();
+    }, 5000);
+  }
+  function stopBuzzTimer() { clearInterval(buzzTimer); buzzTimer = null; }
+
   function pickChoice(i) {
     if (state !== 'BUZZED' || buzzedPlayer !== (isHost ? 'host' : 'guest')) return;
     if (isHost) resolveAnswer(i);
@@ -496,6 +517,7 @@
 
   function resolveAnswer(i) { // host only
     if (state !== 'BUZZED' || wrongIdxs.includes(i)) return;
+    stopBuzzTimer();
     if (i === correctIdx) {
       scores[buzzedPlayer] += 100;
       state = 'REVEALED';
